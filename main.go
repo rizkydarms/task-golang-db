@@ -49,6 +49,21 @@ func main() {
 
 	accountRoutes.GET("/my", middleware.AuthMiddleware(signingKey), accountHandler.My)
 
+	// grouping route with /transaction-category
+	transaction_categoryHandler := handler.NewTransCat(db)
+	transaction_categoryRoutes := r.Group("/transaction-category")
+	transaction_categoryRoutes.POST("/create", transaction_categoryHandler.Create)
+	transaction_categoryRoutes.GET("/read/:id", transaction_categoryHandler.Read)
+	transaction_categoryRoutes.PATCH("/update/:id", transaction_categoryHandler.Update)
+	transaction_categoryRoutes.DELETE("/delete/:id", transaction_categoryHandler.Delete)
+	transaction_categoryRoutes.GET("/list", transaction_categoryHandler.List)
+
+	// grouping route with account/topup, account/balance
+	accountRoutes.POST("/topup", accountHandler.TopUp)
+	accountRoutes.POST("/balance", middleware.AuthMiddleware(signingKey), accountHandler.Balance)
+
+	transaction_categoryRoutes.GET("/my", middleware.AuthMiddleware(signingKey), transaction_categoryHandler.My)
+
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
 
