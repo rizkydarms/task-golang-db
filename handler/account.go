@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"task-golang-db/model"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,6 +18,8 @@ type AccountInterface interface {
 	My(*gin.Context)
 	TopUp(*gin.Context)
 	Balance(*gin.Context)
+	Transfer(*gin.Context)
+	Mutation(*gin.Context)
 }
 
 type accountImplement struct {
@@ -180,4 +183,82 @@ func (a *accountImplement) Balance(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"balance": account.Balance})
+}
+
+// Implementasi metode Transfer
+func (a *accountImplement) Transfer(c *gin.Context) {
+	AccountID := c.GetInt64("account_id")
+	payload := struct {
+		ToAccountID int64 `json:"to_account_id"`
+		Amount      int64 `json:"amount"`
+	}{}
+
+	if err := c.BindJSON(&payload); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Fetch the current and target accounts
+	var senderAccount model.Account
+	var receiverAccount model.Account
+
+	if err := a.db.First(&senderAccount, AccountID).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Sender account not found"})
+		return
+	}
+
+	if err := a.db.First(&receiverAccount, payload.ToAccountID).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Target account not found"})
+		return
+	}
+
+	// Check balance and update if sufficient
+	if senderAccount.Balance < float64(payload.Amount) {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Insufficient balance"})
+		return
+	}
+
+	senderAccount.Balance -= float64(payload.Amount)
+	receiverAccount.Balance += float64(payload.Amount)
+
+	if err := a.db.Save(&senderAccount).Error; err != nil || a.db.Save(&receiverAccount).Error != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to transfer balance"})
+		return
+	}
+
+	// Convert AccountID and ToAccountID to int8
+	fromAccountID := int8(AccountID)
+	toAccountID := int8(payload.ToAccountID)
+	amount := int8(payload.Amount)
+
+	// Create transaction record
+	transaction := model.Transaction{
+		AccountID:       fromAccountID,
+		FromAccountId:   fromAccountID,
+		ToAccountId:     toAccountID,
+		Amount:          amount,
+		TransactionDate: time.Now().Format("2006-01-02 15:04:05"), // format sebagai string
+	}
+	if err := a.db.Create(&transaction).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to record transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Transfer successful"})
+}
+
+// Imp;ementasi metode Mutations
+// Mutation returns a list of transactions for the current user, sorted by latest (requires auth)
+func (a *accountImplement) Mutation(c *gin.Context) {
+	accountID := c.GetInt64("account_id")
+
+	var transactions []model.Transaction
+	query := a.db.Where("account_id = ?", accountID).Order("transaction_date DESC")
+
+	if err := query.Find(&transactions).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
