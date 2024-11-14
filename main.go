@@ -2,12 +2,14 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"task-golang-db/handler"
 	"task-golang-db/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -70,6 +72,15 @@ func main() {
 	transactionRoutes.POST("/new", transactionHandler.NewTransaction)
 	transactionRoutes.GET("/list", transactionHandler.TransactionList)
 
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:54733"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "Access-Control-Allow-Origin"},
+		AllowCredentials: true,
+	})
+
+	handler := c.Handler(r)
+	http.ListenAndServe(":8080", handler)
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
 
